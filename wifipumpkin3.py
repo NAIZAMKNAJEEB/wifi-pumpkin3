@@ -150,6 +150,11 @@ server=8.8.8.8
         if self.is_scanning: return False
         self.is_scanning = True
         self.log("Persistent survey started", "START")
+        
+        # Cleanup old results to prevent filename increments (-01, -02, etc.)
+        if sys.platform != "win32":
+            subprocess.run("rm -f /tmp/scan_results*", shell=True)
+            
         threading.Thread(target=self._scan_loop, daemon=True).start()
         return True
 
@@ -161,10 +166,17 @@ server=8.8.8.8
     def _scan_loop(self):
         if sys.platform != "win32":
             csv_path = "/tmp/scan_results"
-            self.scanning_process = subprocess.Popen(
-                ["airodump-ng", self.selected_interface, "--write", csv_path, "--output-format", "csv"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
+            self.log(f"Spawning airodump-ng on {self.selected_interface}...", "DEBUG")
+            try:
+                self.scanning_process = subprocess.Popen(
+                    ["airodump-ng", self.selected_interface, "--write", csv_path, "--output-format", "csv"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                )
+                self.log("airodump-ng process spawned", "SUCCESS")
+            except Exception as e:
+                self.log(f"Failed to spawn airodump-ng: {str(e)}", "ERROR")
+                self.is_scanning = False
+                return
             
         while self.is_scanning:
             if sys.platform == "win32":
@@ -177,6 +189,13 @@ server=8.8.8.8
                 ]
             else:
                 self._parse_airodump_csv(csv_path + "-01.csv")
+                # Check if process died
+                if self.scanning_process.poll() is not None:
+                    _, stderr = self.scanning_process.communicate()
+                    self.log(f"airodump-ng crashed: {stderr[:100]}", "ERROR")
+                    self.is_scanning = False
+                    break
+                    
             time.sleep(5)
             
         if self.scanning_process: self.scanning_process.terminate()
@@ -184,22 +203,35 @@ server=8.8.8.8
     def _parse_airodump_csv(self, path):
         if not os.path.exists(path): return
         try:
-            with open(path, "r") as f:
+            with open(path, "r", encoding='utf-8', errors='ignore') as f:
                 reader = csv.reader(f)
                 networks = []
                 section = 0
                 for row in reader:
                     if not row: continue
+                    # Airodump CSV uses two sections: APs and Clients
                     if "BSSID" in row[0]: section = 1; continue
                     if "Station" in row[0]: section = 2; break
+                    
                     if section == 1:
                         if len(row) > 13:
-                            networks.append({
-                                "bssid": row[0].strip(),
-                                "channel": row[3].strip(),
-                                "signal": int(row[8].strip()),
-                                "ssid": row[13].strip()
-                            })
+                            try:
+                                bssid = row[0].strip()
+                                channel = row[3].strip()
+                                signal = row[8].strip()
+                                ssid = row[13].strip()
+                                
+                                # Convert signal to int, handle weird values
+                                sig_val = int(signal) if signal and signal != "-1" else -100
+                                
+                                networks.append({
+                                    "bssid": bssid,
+                                    "channel": channel,
+                                    "signal": sig_val,
+                                    "ssid": ssid if ssid else "<Hidden SSID>"
+                                })
+                            except (ValueError, IndexError):
+                                continue
                 self.scanned_networks = networks
         except Exception as e:
             self.log(f"Scan parse error: {str(e)}", "ERROR")
@@ -253,10 +285,24 @@ server=8.8.8.8
         self.monitor_mode = state
         if sys.platform != "win32":
             cmd = ["airmon-ng", "start" if state else "stop", self.selected_interface]
-            subprocess.run(cmd)
+            self.log(f"Executing: {' '.join(cmd)}", "DEBUG")
+            process = subprocess.run(cmd, capture_output=True, text=True)
+            if process.returncode != 0:
+                self.log(f"airmon-ng failed: {process.stderr[:100]}", "ERROR")
+                return False
+                
             # Update selected interface to mon version if starting
-            if state: self.selected_interface += "mon"
-            else: self.selected_interface = self.selected_interface.replace("mon", "")
+            if state:
+                # airmon-ng usually adds 'mon' or creates a new device
+                # We'll try to find the new interface
+                time.sleep(2) # Give kernel time to rename
+                new_ifaces = self._get_real_interfaces()
+                for iface in new_ifaces:
+                    if iface.startswith(self.selected_interface) and iface.endswith("mon"):
+                        self.selected_interface = iface
+                        break
+            else:
+                self.selected_interface = self.selected_interface.replace("mon", "")
             
         status = "ENABLED" if state else "DISABLED"
         self.log(f"Monitor mode {status} on {self.selected_interface}", "SUCCESS")
