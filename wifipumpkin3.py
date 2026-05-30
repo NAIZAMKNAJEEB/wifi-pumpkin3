@@ -3,8 +3,9 @@ import subprocess
 import os
 import sys
 import time
-from datetime import datetime
+import csv
 import collections
+from datetime import datetime
 
 # Global log buffer for Django to consume
 log_buffer = collections.deque(maxlen=1000)
@@ -21,8 +22,18 @@ class WiFiPumpkinEngine:
         self.clients = []
         self.is_scanning = False
         self.credentials = []
-        self.portal_template = "Standard login"
         self.dhcp_leases = []
+        self.interfaces = self._get_real_interfaces()
+        self.selected_interface = self.interfaces[0] if self.interfaces else "wlan0"
+        self.monitor_mode = False
+        self.mitm_method = "DNS Spoofing"
+        self.traffic_stats = {"sent": [], "received": []}
+        self.scanning_process = None
+        self.ap_process = None
+        self.dns_process = None
+        
+        if sys.platform != "win32" and os.getuid() != 0:
+            self.log("ATTENTION: Root privileges required for hardware access!", "WARNING")
 
     def log(self, msg, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -50,11 +61,58 @@ class WiFiPumpkinEngine:
             self.log(f"Execution Error: {e}", "ERROR")
             return ""
 
+    def _get_real_interfaces(self):
+        if sys.platform == "win32":
+            return ["wlan0", "eth0", "WiFi (Simulated)"]
+        try:
+            output = subprocess.check_output(["iw", "dev"]).decode()
+            ifaces = [line.strip().split()[1] for line in output.split("\n") if "Interface" in line]
+            return ifaces if ifaces else ["wlan0"]
+        except:
+            return ["wlan0"]
+
     def start_attack(self):
         if self.is_running: return False
         self.is_running = True
-        self.log("Initializing attack sequence...", "START")
-        threading.Thread(target=self._attack_loop, daemon=True).start()
+        self.log(f"Launching Rogue AP on {self.selected_interface}...", "START")
+        
+        if sys.platform != "win32":
+            self._start_linux_ap()
+        
+        return True
+
+    def _start_linux_ap(self):
+        # hostapd config
+        conf = f"""
+interface={self.selected_interface}
+ssid=NYX_Cyber_HUD
+hw_mode=g
+channel=6
+auth_algs=1
+wpa=2
+wpa_passphrase=password123
+wpa_key_mgmt=WPA-PSK
+"""
+        with open("/tmp/hostapd.conf", "w") as f: f.write(conf)
+        self.ap_process = subprocess.Popen(["hostapd", "/tmp/hostapd.conf"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # dnsmasq for DHCP
+        dns_conf = f"""
+interface={self.selected_interface}
+dhcp-range=192.168.1.10,192.168.1.250,12h
+dhcp-option=3,192.168.1.1
+dhcp-option=6,192.168.1.1
+server=8.8.8.8
+"""
+        with open("/tmp/dnsmasq.conf", "w") as f: f.write(dns_conf)
+        subprocess.run(["ifconfig", self.selected_interface, "192.168.1.1", "netmask", "255.255.255.0", "up"])
+        self.dns_process = subprocess.Popen(["dnsmasq", "-C", "/tmp/dnsmasq.conf", "-d"], stdout=subprocess.PIPE)
+
+    def stop_attack(self):
+        self.is_running = False
+        self.log("Shutting down engine...", "STOP")
+        if self.ap_process: self.ap_process.terminate()
+        if self.dns_process: self.dns_process.terminate()
         return True
 
     def _attack_loop(self):
@@ -110,16 +168,50 @@ class WiFiPumpkinEngine:
         return True
 
     def _scan_loop(self):
+        if sys.platform != "win32":
+            csv_path = "/tmp/scan_results"
+            self.scanning_process = subprocess.Popen(
+                ["airodump-ng", self.selected_interface, "--write", csv_path, "--output-format", "csv"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            
         while self.is_scanning:
             if sys.platform == "win32":
                 import random
-                # Add some randomness to simulated results
+                # Simulated results
                 self.scanned_networks = [
                     {"ssid": "Free_Coffee_WiFi", "bssid": "AA:BB:CC:DD:EE:01", "channel": "1", "signal": random.randint(-60, -40)},
                     {"ssid": "Airport_Guest", "bssid": "AA:BB:CC:DD:EE:02", "channel": "6", "signal": random.randint(-70, -50)},
                     {"ssid": "Corporate_Net", "bssid": "AA:BB:CC:DD:EE:03", "channel": "11", "signal": random.randint(-85, -70)}
                 ]
+            else:
+                self._parse_airodump_csv(csv_path + "-01.csv")
             time.sleep(5)
+            
+        if self.scanning_process: self.scanning_process.terminate()
+
+    def _parse_airodump_csv(self, path):
+        if not os.path.exists(path): return
+        try:
+            with open(path, "r") as f:
+                reader = csv.reader(f)
+                networks = []
+                section = 0
+                for row in reader:
+                    if not row: continue
+                    if "BSSID" in row[0]: section = 1; continue
+                    if "Station" in row[0]: section = 2; break
+                    if section == 1:
+                        if len(row) > 13:
+                            networks.append({
+                                "bssid": row[0].strip(),
+                                "channel": row[3].strip(),
+                                "signal": int(row[8].strip()),
+                                "ssid": row[13].strip()
+                            })
+                self.scanned_networks = networks
+        except Exception as e:
+            self.log(f"Scan parse error: {str(e)}", "ERROR")
 
     def get_clients(self):
         if sys.platform == "win32":
@@ -157,6 +249,41 @@ class WiFiPumpkinEngine:
             self.log("[+] Found ONVIF Camera at 192.168.1.100", "SUCCESS")
         threading.Thread(target=_scan, daemon=True).start()
         return True
+
+    def list_interfaces(self):
+        return self.interfaces
+
+    def set_interface(self, iface):
+        self.selected_interface = iface
+        self.log(f"Primary interface set to {iface}", "INFO")
+        return True
+
+    def toggle_monitor(self, state):
+        self.monitor_mode = state
+        if sys.platform != "win32":
+            cmd = ["airmon-ng", "start" if state else "stop", self.selected_interface]
+            subprocess.run(cmd)
+            # Update selected interface to mon version if starting
+            if state: self.selected_interface += "mon"
+            else: self.selected_interface = self.selected_interface.replace("mon", "")
+            
+        status = "ENABLED" if state else "DISABLED"
+        self.log(f"Monitor mode {status} on {self.selected_interface}", "SUCCESS")
+        return True
+
+    def set_mitm_method(self, method):
+        self.mitm_method = method
+        self.log(f"MITM vector switched to {method}", "INFO")
+        return True
+
+    def get_stats(self):
+        import random
+        self.traffic_stats["sent"].append(random.randint(10, 100))
+        self.traffic_stats["received"].append(random.randint(50, 500))
+        if len(self.traffic_stats["sent"]) > 20:
+            self.traffic_stats["sent"].pop(0)
+            self.traffic_stats["received"].pop(0)
+        return self.traffic_stats
 
 # Initialize a global engine instance
 engine = WiFiPumpkinEngine()

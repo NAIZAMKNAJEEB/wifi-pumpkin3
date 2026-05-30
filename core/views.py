@@ -57,7 +57,24 @@ def update_settings(request):
         if 'portal' in data:
             engine.portal_template = data['portal']
             engine.log(f"Active portal changed to: {data['portal']}", "INFO")
+        if 'interface' in data:
+            engine.set_interface(data['interface'])
+        if 'monitor' in data:
+            engine.toggle_monitor(data['monitor'])
+        if 'mitm' in data:
+            engine.set_mitm_method(data['mitm'])
         return JsonResponse({'status': 'success'})
+
+def get_hardware_info(request):
+    return JsonResponse({
+        'interfaces': engine.list_interfaces(),
+        'selected': engine.selected_interface,
+        'monitor': engine.monitor_mode,
+        'mitm': engine.mitm_method
+    })
+
+def get_stats(request):
+    return JsonResponse(engine.get_stats())
 
 def settings_view(request):
     if request.method == 'POST':

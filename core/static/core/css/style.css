@@ -289,6 +289,16 @@ h1 {
 .cred-user { color: var(--accent); font-weight: bold; }
 .cred-pass { color: var(--text-secondary); font-family: monospace; }
 
+#traffic-graph {
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+    background: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 19%,
+        rgba(255,255,255,0.02) 20%
+    );
+}
+
 .dot { width: 10px; height: 10px; border-radius: 50%; }
 .dot.red { background: #ff5f56; }
 .dot.yellow { background: #ffbd2e; }

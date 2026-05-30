@@ -24,24 +24,29 @@ A premium, cyber-themed web interface for the `wifipumpkin3` framework. This pro
    cd "wifi pumpkin3"
    ```
 
-2. **Create a Virtual Environment**
+### Installation (Kali Linux)
+1. **Clone the repository**:
+   ```bash
+   git clone <repo-url>
+   cd wifi-pumpkin3
+   ```
+2. **Install hacking tools**:
+   ```bash
+   sudo apt update && sudo apt install hostapd dnsmasq aircrack-ng iw
+   ```
+3. **Setup environment**:
    ```bash
    python -m venv .venv
-   ```
-
-3. **Activate the Environment**
-   - **Windows**: `.venv\Scripts\activate`
-   - **Linux/macOS**: `source .venv/bin/activate`
-
-4. **Install Dependencies**
-   ```bash
+   source .venv/bin/activate
    pip install -r requirements.txt
    ```
-
-5. **Run the Dashboard**
+4. **Launch Dashboard**:
    ```bash
-   python manage.py runserver
+   sudo .venv/bin/python manage.py runserver
    ```
+
+> [!IMPORTANT]
+> **Root Privileges**: Hardware manipulation (monitor mode, packet injection) requires `sudo` privileges on Linux systems.
 
 6. **Access the HUD**
    Open your browser and navigate to `http://127.0.0.1:8000`.

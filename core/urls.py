@@ -11,4 +11,6 @@ urlpatterns = [
     path('api/clients/', views.get_clients, name='get_clients'),
     path('api/deauth/', views.deauth_target, name='deauth_target'),
     path('api/settings/', views.update_settings, name='update_settings'),
+    path('api/hardware/', views.get_hardware_info, name='get_hardware'),
+    path('api/stats/', views.get_stats, name='get_stats'),
 ]

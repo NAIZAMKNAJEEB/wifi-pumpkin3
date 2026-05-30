@@ -134,23 +134,41 @@
 </div>
 
 <div id="settings-tab" class="tab-content">
-    <div class="card">
-        <h3>Attacker Configuration</h3>
-        <p class="subtitle">Customize your deployment parameters</p>
+    <div class="card" style="margin-bottom:30px">
+        <h3>Hardware & Interface</h3>
+        <p class="subtitle">Management of physical network adapters</p>
         
-        <div style="margin-top:25px">
-            <label style="display:block; margin-bottom:10px; color:var(--text-secondary)">Active Phishing Template</label>
-            <select class="btn" style="background:rgba(255,255,255,0.05); color:white; border:1px solid rgba(255,255,255,0.1); width:100%; text-align:left; padding:12px" onchange="updatePortal(this.value)">
-                <option value="Standard Login">Standard Generic Login</option>
-                <option value="Google OAuth">Google OAuth Proxy</option>
-                <option value="Starbucks WiFi">Starbucks Reward Portal</option>
-                <option value="Apple ID">Apple ID Verification</option>
-                <option value="Microsoft 365">Microsoft 365 Login</option>
-            </select>
-            <p style="font-size:12px; color:var(--text-secondary); margin-top:8px">Select the captive portal template served to clients on the rogue AP.</p>
+        <div style="margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:20px">
+            <div>
+                <label style="display:block; margin-bottom:8px; color:var(--text-secondary)">Network Adapter</label>
+                <select id="interface-select" class="btn" style="background:rgba(255,255,255,0.05); color:white; width:100%" onchange="updateHardware({interface: this.value})">
+                    <!-- Interfaces filled by JS -->
+                </select>
+            </div>
+            <div>
+                <label style="display:block; margin-bottom:8px; color:var(--text-secondary)">Hardware State</label>
+                <button id="monitor-btn" class="btn btn-primary" style="width:100%" onclick="toggleMonitor()">
+                    Enable Monitor Mode
+                </button>
+            </div>
         </div>
     </div>
-</div>
+
+    <div class="card" style="margin-bottom:30px">
+        <h3>MITM Attack Vector</h3>
+        <p class="subtitle">Select the primary man-in-the-middle strategy</p>
+        
+        <div style="margin-top:20px">
+            <select id="mitm-select" class="btn" style="background:rgba(255,255,255,0.05); color:white; width:100%" onchange="updateHardware({mitm: this.value})">
+                <option value="DNS Spoofing">DNS Spoofing (Standard)</option>
+                <option value="SSL Strip">SSL Strip (HTTPS Downgrade)</option>
+                <option value="Karma">Karma Attack (Auto-Connect)</option>
+                <option value="BeEF">BeEF Integration Hook</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="card">
 {% endblock %}
 
 {% block scripts %}
@@ -209,7 +227,68 @@
             });
     }
 
-    setInterval(fetchLogs, 2000);
+    async function updateHardware(data) {
+        await fetch('{% url "update_settings" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify(data)
+        });
+        loadHardwareInfo();
+    }
+
+    async function toggleMonitor() {
+        const btn = document.getElementById('monitor-btn');
+        const isMonitor = btn.innerText.includes('Disable');
+        await updateHardware({ monitor: !isMonitor });
+    }
+
+    async function loadHardwareInfo() {
+        const resp = await fetch('{% url "get_hardware" %}');
+        const data = await resp.json();
+        
+        const select = document.getElementById('interface-select');
+        select.innerHTML = '';
+        data.interfaces.forEach(iface => {
+            const opt = document.createElement('option');
+            opt.value = iface;
+            opt.text = iface;
+            opt.selected = (iface === data.selected);
+            select.appendChild(opt);
+        });
+
+        const mBtn = document.getElementById('monitor-btn');
+        if (data.monitor) {
+            mBtn.innerText = 'Disable Monitor Mode';
+            mBtn.className = 'btn btn-danger';
+        } else {
+            mBtn.innerText = 'Enable Monitor Mode';
+            mBtn.className = 'btn btn-primary';
+        }
+
+        document.getElementById('mitm-select').value = data.mitm;
+    }
+
+    async function fetchStats() {
+        const resp = await fetch('{% url "get_stats" %}');
+        const data = await resp.json();
+        const container = document.getElementById('traffic-graph');
+        container.innerHTML = '';
+        
+        data.received.forEach((val, i) => {
+            const bar = document.createElement('div');
+            bar.style.flex = '1';
+            bar.style.background = 'var(--success)';
+            bar.style.height = (val / 5) + 'px';
+            bar.style.opacity = '0.6';
+            container.appendChild(bar);
+        });
+    }
+
+    window.onload = function() {
+        loadHardwareInfo();
+        setInterval(fetchLogs, 2000);
+        setInterval(fetchStats, 1000);
+    }
 
     function switchTab(tabId) {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
