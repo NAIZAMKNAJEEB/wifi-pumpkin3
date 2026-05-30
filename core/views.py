@@ -76,15 +76,28 @@ def get_hardware_info(request):
 def get_stats(request):
     return JsonResponse(engine.get_stats())
 
-def settings_view(request):
+def stealth_mode(request):
+    if engine.randomize_mac():
+        return JsonResponse({'status': 'success'})
+    return JsonResponse({'status': 'error'})
+
+def toggle_capture(request):
     if request.method == 'POST':
-        data = json.loads(request.body)
-        engine.ssid = data.get('ssid', engine.ssid)
-        engine.interface = data.get('interface', engine.interface)
-        engine.monitor = data.get('monitor', engine.monitor)
-        engine.channel = data.get('channel', engine.channel)
+        action = json.loads(request.body).get('action', 'start')
+        if action == 'start':
+            engine.start_capture()
+        else:
+            engine.stop_capture()
         return JsonResponse({'status': 'success'})
     
-    return render(request, 'core/settings.html', {
-        'engine': engine
+    return JsonResponse({
+        'is_capturing': engine.is_capturing,
+        'pcap_path': engine.pcap_path
     })
+
+from django.http import FileResponse
+import os
+def download_pcap(request):
+    if os.path.exists(engine.pcap_path):
+        return FileResponse(open(engine.pcap_path, 'rb'), as_attachment=True, filename='traffic.pcap')
+    return JsonResponse({'status': 'error', 'message': 'Capture file not found'}, status=404)

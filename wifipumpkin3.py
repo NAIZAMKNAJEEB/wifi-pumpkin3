@@ -28,9 +28,13 @@ class WiFiPumpkinEngine:
         self.monitor_mode = False
         self.mitm_method = "DNS Spoofing"
         self.traffic_stats = {"sent": [], "received": []}
+        self.traffic_stats = {"sent": [], "received": []}
         self.scanning_process = None
         self.ap_process = None
         self.dns_process = None
+        self.pcap_process = None
+        self.is_capturing = False
+        self.pcap_path = "/tmp/traffic.pcap"
         
         if sys.platform != "win32" and os.getuid() != 0:
             self.log("ATTENTION: Root privileges required for hardware access!", "WARNING")
@@ -343,6 +347,40 @@ server=8.8.8.8
             self.traffic_stats["sent"].pop(0)
             self.traffic_stats["received"].pop(0)
         return self.traffic_stats
+
+    def randomize_mac(self):
+        self.log(f"Randomizing MAC address for {self.selected_interface}...", "INFO")
+        if sys.platform != "win32":
+            subprocess.run(["ip", "link", "set", self.selected_interface, "down"])
+            # Use macchanger if available, else manual
+            try:
+                subprocess.run(["macchanger", "-r", self.selected_interface])
+            except:
+                import random
+                mac = "00:%02x:%02x:%02x:%02x:%02x" % (random.randint(0,255), random.randint(0,255), random.randint(0,255), random.randint(0,255), random.randint(0,255))
+                subprocess.run(["ip", "link", "set", "dev", self.selected_interface, "address", mac])
+            subprocess.run(["ip", "link", "set", self.selected_interface, "up"])
+            
+        self.log(f"Identity Masked: Hardware MAC spoofed.", "SUCCESS")
+        return True
+
+    def start_capture(self):
+        if self.is_capturing: return False
+        self.is_capturing = True
+        self.log(f"Starting traffic capture on {self.selected_interface}...", "START")
+        if sys.platform != "win32":
+            self.pcap_process = subprocess.Popen(
+                ["tcpdump", "-i", self.selected_interface, "-w", self.pcap_path],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        return True
+
+    def stop_capture(self):
+        self.is_capturing = False
+        self.log("Stopping traffic capture.", "STOP")
+        if self.pcap_process:
+            self.pcap_process.terminate()
+        return True
 
 # Initialize a global engine instance
 engine = WiFiPumpkinEngine()

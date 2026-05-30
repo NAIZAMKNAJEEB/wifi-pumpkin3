@@ -9,9 +9,10 @@
 
 <div class="tabs-container">
     <div class="tab active" onclick="switchTab('overview')">Overview</div>
-    <div class="tab" onclick="switchTab('scanner')">Network Scanner</div>
-    <div class="tab" onclick="switchTab('clients')">Active Clients</div>
-    <div class="tab" onclick="switchTab('harvester')" style="color:var(--warning)">Credential Harvester</div>
+    <div class="tab" onclick="switchTab('scanner')">Scanner</div>
+    <div class="tab" onclick="switchTab('clients')">Clients</div>
+    <div class="tab" onclick="switchTab('harvester')">Harvester</div>
+    <div class="tab" onclick="switchTab('intel')">Intelligence</div>
     <div class="tab" onclick="switchTab('settings')"><i class="fas fa-cog"></i> Settings</div>
 </div>
 
@@ -132,6 +133,37 @@
         <p class="subtitle" style="margin-bottom:20px">Real-time phishing data acquisition</p>
         <div id="credential-feed">
             <!-- Credentials here -->
+        </div>
+    </div>
+</div>
+
+<div id="intel-tab" class="tab-content">
+    <div class="card" style="margin-bottom:30px">
+        <h3>Stealth & Masking</h3>
+        <p class="subtitle">Hardware identity management</p>
+        <div style="margin-top:20px;">
+            <button class="btn btn-primary" onclick="randomizeMAC()">
+                <i class="fas fa-mask"></i> Randomize Hardware MAC
+            </button>
+            <p style="font-size:12px; color:var(--text-secondary); margin-top:10px;">
+                <i class="fas fa-info-circle"></i> Requires interface to be down temporarily.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Traffic Capture (PCAP)</h3>
+        <p class="subtitle">Real-time packet interception</p>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button class="btn btn-primary" id="capture-start-btn" onclick="toggleCapture('start')">
+                <i class="fas fa-record-vinyl"></i> Start Capture
+            </button>
+            <button class="btn btn-danger" id="capture-stop-btn" onclick="toggleCapture('stop')" style="display:none">
+                <i class="fas fa-stop"></i> Stop Capture
+            </button>
+            <a href="{% url 'download_pcap' %}" class="btn" style="background:rgba(255,255,255,0.05)">
+                <i class="fas fa-download"></i> Download .pcap
+            </a>
         </div>
     </div>
 </div>
@@ -399,11 +431,28 @@
         if (!confirm(`Launch deauth attack on ${bssid}?`)) return;
         await fetch('{% url "deauth_target" %}', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrftoken 
-            },
-            body: JSON.stringify({ bssid: bssid })
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ target: bssid })
+        });
+    }
+
+    async function randomizeMAC() {
+        const resp = await fetch('{% url "stealth_mode" %}');
+        const data = await resp.json();
+        if (data.status === 'success') {
+            alert('MAC Address randomized successfully!');
+            loadHardwareInfo();
+        }
+    }
+
+    async function toggleCapture(action) {
+        document.getElementById('capture-start-btn').style.display = action === 'start' ? 'none' : 'inline-flex';
+        document.getElementById('capture-stop-btn').style.display = action === 'start' ? 'inline-flex' : 'none';
+        
+        await fetch('{% url "toggle_capture" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ action: action })
         });
     }
 

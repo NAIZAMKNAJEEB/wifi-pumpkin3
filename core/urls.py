@@ -13,4 +13,7 @@ urlpatterns = [
     path('api/settings/', views.update_settings, name='update_settings'),
     path('api/hardware/', views.get_hardware_info, name='get_hardware'),
     path('api/stats/', views.get_stats, name='get_stats'),
+    path('api/stealth/random/', views.stealth_mode, name='stealth_mode'),
+    path('api/capture/toggle/', views.toggle_capture, name='toggle_capture'),
+    path('api/capture/download/', views.download_pcap, name='download_pcap'),
 ]
