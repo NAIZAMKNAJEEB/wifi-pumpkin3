@@ -20,6 +20,9 @@ class WiFiPumpkinEngine:
         self.scanned_networks = []
         self.clients = []
         self.is_scanning = False
+        self.credentials = []
+        self.portal_template = "Standard login"
+        self.dhcp_leases = []
 
     def log(self, msg, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -94,40 +97,57 @@ class WiFiPumpkinEngine:
         threading.Thread(target=lambda: subprocess.run(f"aireplay-ng --deauth 0 -a {target} {self.monitor}", shell=True), daemon=True).start()
         return True
 
-    def scan_access_points(self):
+    def start_continuous_scan(self):
         if self.is_scanning: return False
         self.is_scanning = True
-        self.log("Starting network survey...", "INFO")
-        
-        def _scan():
-            time.sleep(3)
-            if sys.platform == "win32":
-                self.scanned_networks = [
-                    {"ssid": "Free_Coffee_WiFi", "bssid": "AA:BB:CC:DD:EE:01", "channel": "1", "signal": -45},
-                    {"ssid": "Airport_Guest", "bssid": "AA:BB:CC:DD:EE:02", "channel": "6", "signal": -62},
-                    {"ssid": "Corporate_Net", "bssid": "AA:BB:CC:DD:EE:03", "channel": "11", "signal": -78}
-                ]
-            else:
-                # Real scanning logic using airodump-ng could go here
-                pass
-            self.is_scanning = False
-            self.log(f"Survey complete. Found {len(self.scanned_networks)} networks.", "SUCCESS")
-            
-        threading.Thread(target=_scan, daemon=True).start()
+        self.log("Persistent survey started", "START")
+        threading.Thread(target=self._scan_loop, daemon=True).start()
         return True
+
+    def stop_continuous_scan(self):
+        self.is_scanning = False
+        self.log("Persistent survey stopped", "STOP")
+        return True
+
+    def _scan_loop(self):
+        while self.is_scanning:
+            if sys.platform == "win32":
+                import random
+                # Add some randomness to simulated results
+                self.scanned_networks = [
+                    {"ssid": "Free_Coffee_WiFi", "bssid": "AA:BB:CC:DD:EE:01", "channel": "1", "signal": random.randint(-60, -40)},
+                    {"ssid": "Airport_Guest", "bssid": "AA:BB:CC:DD:EE:02", "channel": "6", "signal": random.randint(-70, -50)},
+                    {"ssid": "Corporate_Net", "bssid": "AA:BB:CC:DD:EE:03", "channel": "11", "signal": random.randint(-85, -70)}
+                ]
+            time.sleep(5)
 
     def get_clients(self):
         if sys.platform == "win32":
-            # Simulate dynamic clients
-            if self.is_running and len(self.clients) < 5:
+            if self.is_running and len(self.clients) < 10:
                 import random
-                if random.random() > 0.7:
+                if random.random() > 0.6:
+                    new_mac = f"00:11:22:33:44:{random.randint(10,99)}"
                     self.clients.append({
-                        "mac": f"00:11:22:33:44:{random.randint(10,99)}",
+                        "mac": new_mac,
                         "ip": f"192.168.69.{len(self.clients)+50}",
-                        "vendor": "Apple Inc.",
+                        "vendor": random.choice(["Apple Inc.", "Samsung Electronics", "Google LLC"]),
                         "first_seen": datetime.now().strftime("%H:%M:%S")
                     })
+                    self.dhcp_leases.append({
+                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "mac": new_mac,
+                        "ip": f"192.168.69.{len(self.clients)+50}",
+                        "hostname": f"device-{random.randint(100,999)}"
+                    })
+                    # Simulate credential capture
+                    if random.random() > 0.8:
+                        self.credentials.append({
+                            "timestamp": datetime.now().strftime("%H:%M:%S"),
+                            "target": new_mac,
+                            "service": "Google Auth",
+                            "user": f"user{random.randint(1,100)}@gmail.com",
+                            "pass": "********"
+                        })
         return self.clients
 
     def scan_onvif(self):

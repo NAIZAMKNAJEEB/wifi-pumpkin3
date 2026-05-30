@@ -27,23 +27,37 @@ def get_logs(request):
 
 def scan_networks(request):
     if request.method == 'POST':
-        if engine.scan_access_points():
-            return JsonResponse({'status': 'success'})
-        return JsonResponse({'status': 'error', 'message': 'Scan already in progress'}, status=400)
+        action = json.loads(request.body).get('action', 'start')
+        if action == 'start':
+            engine.start_continuous_scan()
+        else:
+            engine.stop_continuous_scan()
+        return JsonResponse({'status': 'success'})
     
     return JsonResponse({'networks': engine.scanned_networks})
 
 def get_clients(request):
-    return JsonResponse({'clients': engine.get_clients()})
+    return JsonResponse({
+        'clients': engine.get_clients(),
+        'leases': engine.dhcp_leases,
+        'credentials': engine.credentials
+    })
 
 def deauth_target(request):
     if request.method == 'POST':
-        data = json.loads(request.body)
-        bssid = data.get('bssid')
-        if engine.deauth_attack(bssid):
+        target = json.loads(request.body).get('target')
+        if engine.deauth_attack(target):
             return JsonResponse({'status': 'success'})
-        return JsonResponse({'status': 'error', 'message': 'Attack failed'}, status=400)
+        return JsonResponse({'status': 'error'})
     return JsonResponse({'status': 'error'}, status=405)
+
+def update_settings(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        if 'portal' in data:
+            engine.portal_template = data['portal']
+            engine.log(f"Active portal changed to: {data['portal']}", "INFO")
+        return JsonResponse({'status': 'success'})
 
 def settings_view(request):
     if request.method == 'POST':
