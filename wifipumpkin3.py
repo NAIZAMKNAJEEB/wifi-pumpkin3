@@ -86,37 +86,40 @@ class WiFiPumpkinEngine:
         return True
 
     def _start_linux_ap(self):
-        # 1. Kill conflicting processes (NetworkManager, wpa_supplicant)
-        self.log("Killing conflicting processes...", "INFO")
+        # 1. Kill conflicting processes
+        self.log("Stopping interference (NetworkManager/wpa_supplicant)...", "INFO")
         subprocess.run(["airmon-ng", "check", "kill"])
         
-        # 2. Reset interface state
-        # If it was in monitor mode, hostapd might fail. Let's try to set it to managed.
-        self.log(f"Configuring {self.selected_interface} for Master mode...", "INFO")
+        # 2. Force interface into Master mode
+        self.log(f"Hard-resetting {self.selected_interface}...", "INFO")
         subprocess.run(["ip", "link", "set", self.selected_interface, "down"])
         subprocess.run(["iw", "dev", self.selected_interface, "set", "type", "managed"])
         subprocess.run(["ip", "link", "set", self.selected_interface, "up"])
 
-        # hostapd config
-        conf = f"""
-interface={self.selected_interface}
+        # hostapd config - Using Open Network by default for Rogue AP efficacy
+        conf = f"""interface={self.selected_interface}
+driver=nl80211
 ssid={self.ssid}
 hw_mode=g
 channel={self.channel}
 auth_algs=1
-wpa=2
-wpa_passphrase=password123
-wpa_key_mgmt=WPA-PSK
+ignore_broadcast_ssid=0
 """
         with open("/tmp/hostapd.conf", "w") as f: f.write(conf)
-        self.log("Starting hostapd daemon...", "INFO")
-        self.ap_process = subprocess.Popen(["hostapd", "/tmp/hostapd.conf"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.log("Spawning hostapd daemon (Open Network)...", "INFO")
         
-        # Give it a second to start
-        time.sleep(2)
+        # Use a longer timeout and capture output
+        self.ap_process = subprocess.Popen(
+            ["hostapd", "/tmp/hostapd.conf"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        
+        time.sleep(3)
         if self.ap_process.poll() is not None:
-            _, stderr = self.ap_process.communicate()
-            self.log(f"hostapd failed to start: {stderr[:100]}", "ERROR")
+            stdout, stderr = self.ap_process.communicate()
+            error_msg = stderr or stdout or "Process exited immediately."
+            self.log(f"hostapd failed: {error_msg[:150]}", "ERROR")
+            self.log("TIP: Try a different Wi-Fi adapter or check 'rfkill list'", "WARNING")
             self.is_running = False
             return
 
