@@ -23,8 +23,27 @@ def stop_attack(request):
 
 def get_logs(request):
     logs = list(log_buffer)
-    # Optional: Clear buffer after reading or keep it circular
     return JsonResponse({'logs': logs})
+
+def scan_networks(request):
+    if request.method == 'POST':
+        if engine.scan_access_points():
+            return JsonResponse({'status': 'success'})
+        return JsonResponse({'status': 'error', 'message': 'Scan already in progress'}, status=400)
+    
+    return JsonResponse({'networks': engine.scanned_networks})
+
+def get_clients(request):
+    return JsonResponse({'clients': engine.get_clients()})
+
+def deauth_target(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        bssid = data.get('bssid')
+        if engine.deauth_attack(bssid):
+            return JsonResponse({'status': 'success'})
+        return JsonResponse({'status': 'error', 'message': 'Attack failed'}, status=400)
+    return JsonResponse({'status': 'error'}, status=405)
 
 def settings_view(request):
     if request.method == 'POST':

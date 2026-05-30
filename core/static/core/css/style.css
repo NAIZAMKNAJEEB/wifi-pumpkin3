@@ -145,6 +145,70 @@ h1 {
     font-weight: 700;
 }
 
+/* Tabs */
+.tabs-container {
+    margin-bottom: 30px;
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    gap: 30px;
+}
+
+.tab {
+    padding: 15px 5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border-bottom: 2px solid transparent;
+}
+
+.tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Tables */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.data-table th {
+    text-align: left;
+    padding: 12px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.data-table td {
+    padding: 15px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.signal-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    width: 100px;
+}
+
+.signal-fill {
+    height: 100%;
+    background: var(--success);
+}
+
 /* Controls */
 .controls-section {
     margin-top: 40px;

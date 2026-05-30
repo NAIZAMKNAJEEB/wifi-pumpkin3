@@ -17,6 +17,9 @@ class WiFiPumpkinEngine:
         self.channel = "6"
         self.is_running = False
         self.target_bssid = ""
+        self.scanned_networks = []
+        self.clients = []
+        self.is_scanning = False
 
     def log(self, msg, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -90,6 +93,42 @@ class WiFiPumpkinEngine:
         self.log(f"Launching deauth on {target}", "INFO")
         threading.Thread(target=lambda: subprocess.run(f"aireplay-ng --deauth 0 -a {target} {self.monitor}", shell=True), daemon=True).start()
         return True
+
+    def scan_access_points(self):
+        if self.is_scanning: return False
+        self.is_scanning = True
+        self.log("Starting network survey...", "INFO")
+        
+        def _scan():
+            time.sleep(3)
+            if sys.platform == "win32":
+                self.scanned_networks = [
+                    {"ssid": "Free_Coffee_WiFi", "bssid": "AA:BB:CC:DD:EE:01", "channel": "1", "signal": -45},
+                    {"ssid": "Airport_Guest", "bssid": "AA:BB:CC:DD:EE:02", "channel": "6", "signal": -62},
+                    {"ssid": "Corporate_Net", "bssid": "AA:BB:CC:DD:EE:03", "channel": "11", "signal": -78}
+                ]
+            else:
+                # Real scanning logic using airodump-ng could go here
+                pass
+            self.is_scanning = False
+            self.log(f"Survey complete. Found {len(self.scanned_networks)} networks.", "SUCCESS")
+            
+        threading.Thread(target=_scan, daemon=True).start()
+        return True
+
+    def get_clients(self):
+        if sys.platform == "win32":
+            # Simulate dynamic clients
+            if self.is_running and len(self.clients) < 5:
+                import random
+                if random.random() > 0.7:
+                    self.clients.append({
+                        "mac": f"00:11:22:33:44:{random.randint(10,99)}",
+                        "ip": f"192.168.69.{len(self.clients)+50}",
+                        "vendor": "Apple Inc.",
+                        "first_seen": datetime.now().strftime("%H:%M:%S")
+                    })
+        return self.clients
 
     def scan_onvif(self):
         self.log("Scanning for ONVIF devices...", "INFO")

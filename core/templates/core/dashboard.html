@@ -7,6 +7,14 @@
     <p class="subtitle">Operational state: <span id="status-badge" style="color: {% if is_running %}var(--success){% else %}var(--danger){% endif %}">{% if is_running %}ACTIVE{% else %}IDLE{% endif %}</span></p>
 </header>
 
+<div class="tabs-container">
+    <div class="tab active" onclick="switchTab('overview')">Overview</div>
+    <div class="tab" onclick="switchTab('scanner')">Network Scanner</div>
+    <div class="tab" onclick="switchTab('clients')">Active Clients</div>
+</div>
+
+<div id="overview-tab" class="tab-content active">
+
 <div class="stats-grid">
     <div class="card">
         <span class="card-label">Target SSID</span>
@@ -43,6 +51,51 @@
     </div>
     <div class="terminal-content" id="log-terminal">
         <!-- Logs will be injected here -->
+    </div>
+</div>
+</div>
+
+<div id="scanner-tab" class="tab-content">
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Nearby Access Points</h3>
+            <button class="btn btn-primary" onclick="startScan()" id="scan-btn">
+                <i class="fas fa-search"></i> Start Survey
+            </button>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>SSID</th>
+                    <th>BSSID</th>
+                    <th>CH</th>
+                    <th>Signal</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="scan-results">
+                <!-- Scan results here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="clients-tab" class="tab-content">
+    <div class="card">
+        <h3>Connected Devices</h3>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>MAC Address</th>
+                    <th>IP Address</th>
+                    <th>Vendor</th>
+                    <th>First Seen</th>
+                </tr>
+            </thead>
+            <tbody id="client-list">
+                <!-- Client list here -->
+            </tbody>
+        </table>
     </div>
 </div>
 {% endblock %}
@@ -92,5 +145,85 @@
     }
 
     setInterval(fetchLogs, 2000);
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        event.target.classList.add('active');
+        document.getElementById(tabId + '-tab').classList.add('active');
+    }
+
+    async function startScan() {
+        const btn = document.getElementById('scan-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+        
+        try {
+            await fetch('{% url "scan_networks" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrftoken }
+            });
+            setTimeout(pollScanResults, 3500);
+        } catch (e) { console.error(e); }
+    }
+
+    async function pollScanResults() {
+        const resp = await fetch('{% url "scan_networks" %}');
+        const data = await resp.json();
+        const tbody = document.getElementById('scan-results');
+        tbody.innerHTML = '';
+        
+        data.networks.forEach(net => {
+            const row = document.createElement('tr');
+            const signalPct = Math.min(100, Math.max(0, (net.signal + 100) * 2));
+            row.innerHTML = `
+                <td><strong>${net.ssid}</strong></td>
+                <td>${net.bssid}</td>
+                <td>${net.channel}</td>
+                <td>
+                    <div class="signal-bar"><div class="signal-fill" style="width: ${signalPct}%"></div></div>
+                </td>
+                <td><button class="btn btn-danger btn-sm" onclick="deauthTarget('${net.bssid}')">Deauth</button></td>
+            `;
+            tbody.appendChild(row);
+        });
+        
+        const btn = document.getElementById('scan-btn');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search"></i> Start Survey';
+    }
+
+    async function fetchClients() {
+        const resp = await fetch('{% url "get_clients" %}');
+        const data = await resp.json();
+        const tbody = document.getElementById('client-list');
+        tbody.innerHTML = '';
+        
+        data.clients.forEach(client => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${client.mac}</td>
+                <td>${client.ip}</td>
+                <td>${client.vendor}</td>
+                <td>${client.first_seen}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    async function deauthTarget(bssid) {
+        if (!confirm(`Launch deauth attack on ${bssid}?`)) return;
+        await fetch('{% url "deauth_target" %}', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken 
+            },
+            body: JSON.stringify({ bssid: bssid })
+        });
+    }
+
+    setInterval(fetchClients, 5000);
 </script>
 {% endblock %}
