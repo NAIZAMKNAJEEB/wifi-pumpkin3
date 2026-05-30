@@ -1,0 +1,68 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block content %}
+<header>
+    <h1>System Configuration</h1>
+    <p class="subtitle">Modify WiFiPumpkin core engine parameters</p>
+</header>
+
+<div class="card" style="max-width: 600px;">
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="form-group">
+            <label class="card-label">Wireless Access Point SSID</label>
+            <input type="text" id="ssid-input" value="{{ engine.ssid }}" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+        </div>
+        
+        <div class="form-group">
+            <label class="card-label">Network Interface</label>
+            <input type="text" id="interface-input" value="{{ engine.interface }}" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+        </div>
+
+        <div class="form-group">
+            <label class="card-label">Monitor Mode Interface</label>
+            <input type="text" id="monitor-input" value="{{ engine.monitor }}" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+        </div>
+
+        <div class="form-group">
+            <label class="card-label">Channel</label>
+            <input type="number" id="channel-input" value="{{ engine.channel }}" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+        </div>
+
+        <button class="btn btn-primary" onclick="saveSettings()">
+            <i class="fas fa-save"></i> Save Configuration
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function saveSettings() {
+        const data = {
+            ssid: document.getElementById('ssid-input').value,
+            interface: document.getElementById('interface-input').value,
+            monitor: document.getElementById('monitor-input').value,
+            channel: parseInt(document.getElementById('channel-input').value)
+        };
+
+        try {
+            const resp = await fetch('{% url "settings" %}', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken 
+                },
+                body: JSON.stringify(data)
+            });
+            if (resp.ok) {
+                alert('Settings saved successfully');
+            } else {
+                alert('Failed to save settings');
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+</script>
+{% endblock %}

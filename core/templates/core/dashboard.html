@@ -1,0 +1,89 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block content %}
+<header>
+    <h1>Cyber Reconnaissance</h1>
+    <p class="subtitle">Operational state: <span id="status-badge" style="color: {% if is_running %}var(--success){% else %}var(--danger){% endif %}">{% if is_running %}ACTIVE{% else %}IDLE{% endif %}</span></p>
+</header>
+
+<div class="stats-grid">
+    <div class="card">
+        <span class="card-label">Target SSID</span>
+        <div class="card-value" id="current-ssid">{{ ssid }}</div>
+    </div>
+    <div class="card">
+        <span class="card-label">Interface</span>
+        <div class="card-value">{{ interface }}</div>
+    </div>
+    <div class="card">
+        <span class="card-label">Uptime</span>
+        <div class="card-value" id="uptime">00:00:00</div>
+    </div>
+</div>
+
+<div class="controls-section">
+    <div class="button-group">
+        <button id="start-btn" class="btn btn-primary" onclick="handleAttack('start')">
+            <i class="fas fa-play"></i> Launch Engine
+        </button>
+        <button id="stop-btn" class="btn btn-danger" onclick="handleAttack('stop')">
+            <i class="fas fa-stop"></i> Emergency Stop
+        </button>
+    </div>
+</div>
+
+<div class="terminal-window">
+    <div class="terminal-header">
+        <div class="dot red"></div>
+        <div class="dot yellow"></div>
+        <div class="dot green"></div>
+        <span style="font-size: 12px; color: var(--text-secondary); margin-left: 10px;">nyx-pumpkin@system:~/logs</span>
+    </div>
+    <div class="terminal-content" id="log-terminal">
+        <!-- Logs will be injected here -->
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function handleAttack(action) {
+        const url = action === 'start' ? '{% url "start_attack" %}' : '{% url "stop_attack" %}';
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrftoken }
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                document.getElementById('status-badge').innerText = action === 'start' ? 'ACTIVE' : 'IDLE';
+                document.getElementById('status-badge').style.color = action === 'start' ? 'var(--success)' : 'var(--danger)';
+            } else {
+                alert(data.message);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function fetchLogs() {
+        fetch('{% url "get_logs" %}')
+            .then(r => r.json())
+            .then(data => {
+                const terminal = document.getElementById('log-terminal');
+                data.logs.forEach(log => {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry';
+                    entry.innerHTML = `<span class="log-ts">[${log.timestamp}]</span> <span class="log-level level-${log.level}">${log.level.padEnd(7)}</span> | ${log.message}`;
+                    terminal.appendChild(entry);
+                });
+                if (data.logs.length > 0) {
+                    terminal.scrollTop = terminal.scrollHeight;
+                }
+            });
+    }
+
+    setInterval(fetchLogs, 2000);
+</script>
+{% endblock %}
