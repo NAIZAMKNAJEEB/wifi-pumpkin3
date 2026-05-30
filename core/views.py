@@ -2,7 +2,9 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from wifipumpkin3 import engine, log_buffer
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.http import FileResponse
 import json
+import os
 
 @ensure_csrf_cookie
 def dashboard(request):
@@ -95,9 +97,12 @@ def toggle_capture(request):
         'pcap_path': engine.pcap_path
     })
 
-from django.http import FileResponse
-import os
 def download_pcap(request):
     if os.path.exists(engine.pcap_path):
         return FileResponse(open(engine.pcap_path, 'rb'), as_attachment=True, filename='traffic.pcap')
     return JsonResponse({'status': 'error', 'message': 'Capture file not found'}, status=404)
+
+def settings_view(request):
+    return render(request, 'core/settings.html', {
+        'engine': engine
+    })
