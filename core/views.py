@@ -1,8 +1,10 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from wifipumpkin3 import engine, log_buffer
+from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 
+@ensure_csrf_cookie
 def dashboard(request):
     return render(request, 'core/dashboard.html', {
         'ssid': engine.ssid,

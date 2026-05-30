@@ -24,6 +24,7 @@
 
 <div class="controls-section">
     <div class="button-group">
+        {% csrf_token %}
         <button id="start-btn" class="btn btn-primary" onclick="handleAttack('start')">
             <i class="fas fa-play"></i> Launch Engine
         </button>
@@ -55,12 +56,18 @@
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrftoken }
             });
-            const data = await resp.json();
             if (resp.ok) {
                 document.getElementById('status-badge').innerText = action === 'start' ? 'ACTIVE' : 'IDLE';
                 document.getElementById('status-badge').style.color = action === 'start' ? 'var(--success)' : 'var(--danger)';
             } else {
-                alert(data.message);
+                let msg = 'Request failed';
+                try {
+                    const data = await resp.json();
+                    msg = data.message || msg;
+                } catch(e) {
+                    msg = `Error ${resp.status}: ${resp.statusText}`;
+                }
+                alert(msg);
             }
         } catch (e) {
             console.error(e);

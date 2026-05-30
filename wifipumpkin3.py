@@ -1,6 +1,7 @@
 import threading
 import subprocess
 import os
+import sys
 import time
 from datetime import datetime
 import collections
@@ -28,6 +29,11 @@ class WiFiPumpkinEngine:
         print(f"[{timestamp}] {level: <7} | {msg}")
 
     def run_command(self, cmd):
+        if sys.platform == "win32":
+            self.log(f"SIMULATING: {cmd}", "DEBUG")
+            time.sleep(0.5)
+            return "Simulated output"
+            
         try:
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = process.communicate()
