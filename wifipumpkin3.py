@@ -82,20 +82,40 @@ class WiFiPumpkinEngine:
         return True
 
     def _start_linux_ap(self):
+        # 1. Kill conflicting processes (NetworkManager, wpa_supplicant)
+        self.log("Killing conflicting processes...", "INFO")
+        subprocess.run(["airmon-ng", "check", "kill"])
+        
+        # 2. Reset interface state
+        # If it was in monitor mode, hostapd might fail. Let's try to set it to managed.
+        self.log(f"Configuring {self.selected_interface} for Master mode...", "INFO")
+        subprocess.run(["ip", "link", "set", self.selected_interface, "down"])
+        subprocess.run(["iw", "dev", self.selected_interface, "set", "type", "managed"])
+        subprocess.run(["ip", "link", "set", self.selected_interface, "up"])
+
         # hostapd config
         conf = f"""
 interface={self.selected_interface}
-ssid=NYX_Cyber_HUD
+ssid={self.ssid}
 hw_mode=g
-channel=6
+channel={self.channel}
 auth_algs=1
 wpa=2
 wpa_passphrase=password123
 wpa_key_mgmt=WPA-PSK
 """
         with open("/tmp/hostapd.conf", "w") as f: f.write(conf)
-        self.ap_process = subprocess.Popen(["hostapd", "/tmp/hostapd.conf"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.log("Starting hostapd daemon...", "INFO")
+        self.ap_process = subprocess.Popen(["hostapd", "/tmp/hostapd.conf"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
+        # Give it a second to start
+        time.sleep(2)
+        if self.ap_process.poll() is not None:
+            _, stderr = self.ap_process.communicate()
+            self.log(f"hostapd failed to start: {stderr[:100]}", "ERROR")
+            self.is_running = False
+            return
+
         # dnsmasq for DHCP
         dns_conf = f"""
 interface={self.selected_interface}
@@ -106,7 +126,9 @@ server=8.8.8.8
 """
         with open("/tmp/dnsmasq.conf", "w") as f: f.write(dns_conf)
         subprocess.run(["ifconfig", self.selected_interface, "192.168.1.1", "netmask", "255.255.255.0", "up"])
-        self.dns_process = subprocess.Popen(["dnsmasq", "-C", "/tmp/dnsmasq.conf", "-d"], stdout=subprocess.PIPE)
+        self.log("Starting dnsmasq DHCP service...", "INFO")
+        self.dns_process = subprocess.Popen(["dnsmasq", "-C", "/tmp/dnsmasq.conf", "-d"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.log(f"Rogue AP visible as '{self.ssid}'", "SUCCESS")
 
     def stop_attack(self):
         self.is_running = False
